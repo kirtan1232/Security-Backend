@@ -17,6 +17,7 @@ const https = require("https"); // Add HTTPS module
 const fs = require("fs"); // Add FS module to read certificates
 const app = express();
 const errorHandler = require('./middleware/errorhandler');
+const auditLogRoutes = require('./routes/auditLogRoutes'); // Import AuditLog model
 require('dotenv').config();
 // Connect to MongoDB
 connectDb();
@@ -47,6 +48,7 @@ app.use('/api/completed-sessions', completedSessionsRoutes);
 app.use('/api/esewa', esewaRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/song-requests', songRequestRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
 
 // Handle 404
 app.use((req, res) => {

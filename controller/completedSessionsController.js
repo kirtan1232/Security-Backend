@@ -1,4 +1,5 @@
 const CompletedSessions = require("../model/CompletedSessions");
+const { createLog } = require("./auditLogController"); // Import audit log utility
 
 exports.getCompletedSessions = async (req, res) => {
   try {
@@ -30,22 +31,34 @@ exports.toggleCompletedSession = async (req, res) => {
       completedSessions = new CompletedSessions({ userId, completedSessions: [] });
     }
 
-    const sessionKey = { day, instrument };
     const isCompleted = completedSessions.completedSessions.some(
       (s) => s.day === day && s.instrument === instrument
     );
 
+    let logAction;
     if (isCompleted) {
       // Remove completion
       completedSessions.completedSessions = completedSessions.completedSessions.filter(
         (s) => !(s.day === day && s.instrument === instrument)
       );
+      logAction = "SESSION_COMPLETION_REMOVED";
     } else {
       // Add completion
-      completedSessions.completedSessions.push(sessionKey);
+      completedSessions.completedSessions.push({ day, instrument });
+      logAction = "SESSION_COMPLETED";
     }
 
     await completedSessions.save();
+
+    // --- AUDIT LOG ---
+    await createLog({
+      user: userId,
+      action: logAction,
+      details: { day, instrument },
+      ip: req.ip,
+      userAgent: req.headers["user-agent"]
+    });
+
     res.status(200).json({
       message: "Session completion toggled successfully",
       completedSessions: completedSessions.completedSessions,

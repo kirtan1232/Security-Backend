@@ -3,20 +3,22 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const randomstring = require('randomstring');
 const User = require('../model/User');
-const isStrongPassword = require('../utils/passwordvalidator'); // <-- Use correct casing and spelling!
-const { logProfileUpdate } = require('../utils/auditLogger'); // NEW: for activity logging
+const isStrongPassword = require('../utils/passwordvalidator');
+const { logProfileUpdate } = require('../utils/auditLogger');
+const { createLog } = require('./auditLogController');
 require('dotenv').config();
 const { fromBuffer } = require("file-type");
-const { generateAndSendOTP } = require('./otpController'); 
+const { generateAndSendOTP } = require('./otpController');
 const fs = require("fs");
 
+// Register a new user
 const registerUser = async (req, res) => {
     const { name, email, password, role } = req.body;
     const profilePicture = req.file ? req.file.path : null;
 
     try {
         if (!isStrongPassword(password)) {
-            return res.status(400).json({ message: 'Password should be atleast 8 characters.' });
+            return res.status(400).json({ message: 'Password should be at least 8 characters.' });
         }
         const userExist = await User.findOne({ email });
         if (userExist) {
@@ -42,43 +44,140 @@ const registerUser = async (req, res) => {
         });
 
         await user.save();
-        await generateAndSendOTP(user); // <-- Call here
+        await generateAndSendOTP(user);
+
+        await createLog({
+            user: user._id,
+            action: 'REGISTER',
+            details: { email },
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
 
         res.status(201).json({ message: 'User registered successfully. Please check your email for OTP.', userId: user._id });
     } catch (err) {
-        console.error(err);
+        console.error('Register error:', err);
         res.status(500).json({ message: 'Error registering user' });
     }
 };
 
+// Login user
 const loginUser = async (req, res) => {
     const { email, password } = req.body;
     try {
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ message: 'User does not exist' });
 
-        // Account lockout check
+        // --- LOCKOUT CHECK & RESET ---
         if (user.lockUntil && user.lockUntil > Date.now()) {
-            return res.status(403).json({ message: "Account locked. Try again later." });
+            const timeRemaining = Math.ceil((user.lockUntil - Date.now()) / 1000);
+            await createLog({
+                user: user._id,
+                action: 'LOGIN_BLOCKED',
+                details: { 
+                    reason: 'Account locked',
+                    lockUntil: user.lockUntil,
+                    timeRemaining: timeRemaining + ' seconds'
+                },
+                ip: req.ip,
+                userAgent: req.headers['user-agent']
+            });
+            res.set('Retry-After', timeRemaining);
+            return res.status(403).json({ 
+                message: "Account locked. Try again later.",
+                lockUntil: user.lockUntil,
+                timeRemaining
+            });
+        }
+
+                // If lock expired, reset counters
+            if (user.lockUntil && user.lockUntil <= Date.now()) {
+                user.lockUntil = null;
+                user.failedLoginAttempts = 0;
+                try {
+                    await user.save();
+                    console.log(`Lock reset successful for user ${user.email}, new lockUntil: ${user.lockUntil}, failedLoginAttempts: ${user.failedLoginAttempts}`);
+                } catch (error) {
+                    console.error(`Error resetting lock for user ${user.email}:`, error);
+                    return res.status(500).json({ message: 'Server error during lock reset' });
+                }
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
             user.failedLoginAttempts += 1;
+            
+            // Check if we should lock the account
             if (user.failedLoginAttempts >= 5) {
-                user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-                user.failedLoginAttempts = 0;
+                user.lockUntil = new Date(Date.now() + 2 * 60 * 1000); // Lock for 2 minutes
+                user.failedLoginAttempts = 0; // Reset attempts to avoid accumulation
+                try {
+                    await user.save();
+                    console.log(`Account locked for user ${user.email}, lockUntil: ${user.lockUntil}`);
+                } catch (error) {
+                    console.error(`Error saving lock for user ${user.email}:`, error);
+                    return res.status(500).json({ message: 'Server error during account lock' });
+                }
+                
+                await createLog({
+                    user: user._id,
+                    action: 'ACCOUNT_LOCKED',
+                    details: { 
+                        reason: 'Too many failed login attempts',
+                        failedAttempts: user.failedLoginAttempts,
+                        lockUntil: user.lockUntil
+                    },
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']
+                });
+
+                res.set('Retry-After', 120);
+                return res.status(403).json({ 
+                    message: 'Account locked due to too many failed attempts. Try again in 2 minutes.',
+                    lockUntil: user.lockUntil,
+                    timeRemaining: 120
+                });
+            } else {
+                try {
+                    await user.save();
+                    console.log(`Saved failed login attempt for user ${user.email}, attempts: ${user.failedLoginAttempts}`);
+                } catch (error) {
+                    console.error(`Error saving failed login attempt for user ${user.email}:`, error);
+                    return res.status(500).json({ message: 'Server error during login attempt' });
+                }
+                
+                await createLog({
+                    user: user._id,
+                    action: 'LOGIN_FAILED',
+                    details: { 
+                        reason: 'Invalid password',
+                        failedAttempts: user.failedLoginAttempts,
+                        attemptsRemaining: 5 - user.failedLoginAttempts
+                    },
+                    ip: req.ip,
+                    userAgent: req.headers['user-agent']
+                });
+
+                return res.status(401).json({ 
+                    message: 'Invalid email or password',
+                    attemptsRemaining: 5 - user.failedLoginAttempts
+                });
             }
-            await user.save();
-            return res.status(401).json({ message: 'Invalid email or password' });
         }
+
+        // Successful login - reset counters
         user.failedLoginAttempts = 0;
         user.lockUntil = null;
-        await user.save();
+        try {
+            await user.save();
+            console.log(`Successful login for user ${user.email}, counters reset`);
+        } catch (error) {
+            console.error(`Error saving user after successful login for ${user.email}:`, error);
+            return res.status(500).json({ message: 'Server error after successful login' });
+        }
 
         // --- EMAIL VERIFICATION CHECK ---
         if (!user.emailVerified) {
-            // Send OTP again!
             await generateAndSendOTP(user);
             return res.status(403).json({ message: 'Please verify your email.', userId: user._id });
         }
@@ -88,12 +187,41 @@ const loginUser = async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
+
+        await createLog({
+            user: user._id,
+            action: 'LOGIN_SUCCESS',
+            details: { 
+                email: user.email,
+                role: user.role
+            },
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+
         res.status(200).json({ message: 'Login successful', token, role: user.role });
     } catch (error) {
-        console.error(error);
+        console.error('Login error:', error);
         res.status(500).json({ message: 'Error logging in', error });
     }
 };
+
+// Logout user
+const logoutUser = async (req, res) => {
+    try {
+        await createLog({
+            user: req.user ? req.user.id : null,
+            action: 'LOGOUT',
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+        res.status(200).json({ message: 'Logout successful' });
+    } catch (error) {
+        console.error('Logout error:', error);
+        res.status(500).json({ message: 'Logout error' });
+    }
+};
+
 // Forgot password
 const forgotPassword = async (req, res) => {
     const email = req.body.email;
@@ -105,6 +233,14 @@ const forgotPassword = async (req, res) => {
         const randomToken = randomstring.generate();
         await User.updateOne({ email }, { $set: { token: randomToken } });
         sendResetPasswordMail(userData.name, userData.email, randomToken);
+
+        await createLog({
+            user: userData._id,
+            action: 'FORGOT_PASSWORD',
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+
         return res.status(200).send({ success: true, msg: "Please check your inbox to reset your password." });
     } catch (error) {
         console.error("Error in forgotPassword:", error.message);
@@ -145,10 +281,18 @@ const resetPassword = async (req, res) => {
         }
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await User.updateOne({ _id: userData._id }, { $set: { password: hashedPassword, token: null } });
+
+        await createLog({
+            user: userData._id,
+            action: 'RESET_PASSWORD',
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
+        });
+
         res.status(200).send({ success: true, msg: "Password reset successfully." });
     } catch (error) {
         console.error("Error in resetPassword:", error.message);
-        res.status(500).send({ success: false, msg: error.message });
+        return res.status(500).send({ success: false, msg: error.message });
     }
 };
 
@@ -189,10 +333,24 @@ const updateProfile = async (req, res) => {
             profilePicture = req.file.path;
         }
 
-        if (typeof name === "string" && name.trim() !== "") user.name = name.trim();
-        if (typeof email === "string" && email.trim() !== "") user.email = email.trim();
-        if (typeof about === "string") user.about = about.trim();
-        if (profilePicture) user.profilePicture = profilePicture;
+        const updatedFields = {};
+
+        if (typeof name === "string" && name.trim() !== "") {
+            user.name = name.trim();
+            updatedFields.name = name.trim();
+        }
+        if (typeof email === "string" && email.trim() !== "") {
+            user.email = email.trim();
+            updatedFields.email = email.trim();
+        }
+        if (typeof about === "string") {
+            user.about = about.trim();
+            updatedFields.about = about.trim();
+        }
+        if (profilePicture) {
+            user.profilePicture = profilePicture;
+            updatedFields.profilePicture = profilePicture;
+        }
 
         if (newPassword) {
             if (!oldPassword) {
@@ -206,29 +364,33 @@ const updateProfile = async (req, res) => {
                 return res.status(400).json({ message: "New password does not meet complexity requirements." });
             }
             user.password = await bcrypt.hash(newPassword, 10);
+            updatedFields.password = true;
         }
 
         await user.save();
 
-        await logProfileUpdate(userId, req.user.email, req.ip, {
-            updatedFields: Object.keys(req.body)
+        await createLog({
+            user: userId,
+            action: 'UPDATE_PROFILE',
+            details: { updatedFields: Object.keys(updatedFields) },
+            ip: req.ip,
+            userAgent: req.headers['user-agent']
         });
 
         const safeUser = { ...user.toObject() };
         delete safeUser.password;
         res.status(200).json({ message: 'Profile updated successfully', user: safeUser });
     } catch (err) {
-        console.log("Error updating profile:", err.message); // Log only message
+        console.log("Error updating profile:", err.message);
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.status(500).json({ message: 'Error updating profile' });
     }
 };
 
-
-
 module.exports = {
     registerUser,
     loginUser,
+    logoutUser,
     forgotPassword,
     sendResetPasswordMail,
     resetPassword,

@@ -42,7 +42,7 @@
   "dependencies": {
     "20": "^3.1.9",
     "async-handler-express": "^0.2.4",
-    "axios": "^1.10.0",
+    "axios": "^1.11.0",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "body-parser": "^1.20.3",

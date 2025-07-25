@@ -27,6 +27,7 @@ app.use(cors({
     origin: 'https://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
 }));
 
 // Body parser middleware

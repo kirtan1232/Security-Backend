@@ -11,13 +11,13 @@ exports.createDonationOrder = async (req, res, next) => {
 
   const formData = {
     amount: amount,
-    failure_url: `http://localhost:3000/api/esewa/failure`,
+    failure_url: `https://localhost:3000/api/esewa/failure`,
     product_delivery_charge: "0",
     product_service_charge: "0",
     product_code: "EPAYTEST",
     signature: signature,
     signed_field_names: "total_amount,transaction_uuid,product_code",
-    success_url: `http://localhost:3000/api/esewa/success`,
+    success_url: `https://localhost:3000/api/esewa/success`,
     tax_amount: "0",
     total_amount: amount,
     transaction_uuid: transactionUuid,
@@ -36,18 +36,18 @@ exports.verifyPayment = async (req, res) => {
       const decodedData = JSON.parse(Buffer.from(data, "base64").toString("utf-8"));
       
       if (decodedData.status === "COMPLETE") {
-        return res.redirect(redirect || `http://localhost:5173/success?payment=success`);
+        return res.redirect(redirect || `https://localhost:5173/success?payment=success`);
       }
-      return res.redirect(`http://localhost:5173/dashboard?payment=failure`);
+      return res.redirect(`https://localhost:5173/dashboard?payment=failure`);
     } catch (err) {
       console.error("Payment verification error:", err);
-      return res.redirect(`http://localhost:5173/dashboard?payment=error`);
+      return res.redirect(`https://localhost:5173/dashboard?payment=error`);
     }
   };
 
 exports.handleFailure = async (req, res) => {
     const { redirect } = req.query;
-    return res.redirect(redirect || `http://localhost:5173/dashboard?payment=failure`);
+    return res.redirect(redirect || `https://localhost:5173/dashboard?payment=failure`);
 };
 
 exports.createSignature = (message) => {

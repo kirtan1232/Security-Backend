@@ -90,17 +90,17 @@ const loginUser = async (req, res) => {
             });
         }
 
-                // If lock expired, reset counters
-            if (user.lockUntil && user.lockUntil <= Date.now()) {
-                user.lockUntil = null;
-                user.failedLoginAttempts = 0;
-                try {
-                    await user.save();
-                    console.log(`Lock reset successful for user ${user.email}, new lockUntil: ${user.lockUntil}, failedLoginAttempts: ${user.failedLoginAttempts}`);
-                } catch (error) {
-                    console.error(`Error resetting lock for user ${user.email}:`, error);
-                    return res.status(500).json({ message: 'Server error during lock reset' });
-                }
+        // If lock expired, reset counters
+        if (user.lockUntil && user.lockUntil <= Date.now()) {
+            user.lockUntil = null;
+            user.failedLoginAttempts = 0;
+            try {
+                await user.save();
+                console.log(`Lock reset successful for user ${user.email}, new lockUntil: ${user.lockUntil}, failedLoginAttempts: ${user.failedLoginAttempts}`);
+            } catch (error) {
+                console.error(`Error resetting lock for user ${user.email}:`, error);
+                return res.status(500).json({ message: 'Server error during lock reset' });
+            }
         }
 
         const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -188,6 +188,22 @@ const loginUser = async (req, res) => {
             { expiresIn: '1h' }
         );
 
+        // Set authentication cookie
+        res.cookie('authToken', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production', // Only in production
+            sameSite: 'strict',
+            maxAge: 3600000 // 1 hour in milliseconds
+        });
+        
+        // Set role cookie (accessible to JavaScript)
+        res.cookie('userRole', user.role, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000 // 1 hour
+        });
+
         await createLog({
             user: user._id,
             action: 'LOGIN_SUCCESS',
@@ -199,6 +215,7 @@ const loginUser = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
+        // Keep sending token in response for localStorage compatibility
         res.status(200).json({ message: 'Login successful', token, role: user.role });
     } catch (error) {
         console.error('Login error:', error);
@@ -215,10 +232,41 @@ const logoutUser = async (req, res) => {
             ip: req.ip,
             userAgent: req.headers['user-agent']
         });
+        
+        // Clear authentication cookies
+        res.clearCookie('authToken');
+        res.clearCookie('userRole');
+        
         res.status(200).json({ message: 'Logout successful' });
     } catch (error) {
         console.error('Logout error:', error);
         res.status(500).json({ message: 'Logout error' });
+    }
+};
+
+// Check authentication status
+const checkAuth = async (req, res) => {
+    try {
+        const token = req.cookies.authToken;
+        if (!token) {
+            return res.status(401).json({ isAuthenticated: false });
+        }
+        
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id).select('-password');
+        
+        if (!user) {
+            return res.status(401).json({ isAuthenticated: false });
+        }
+        
+        return res.status(200).json({ 
+            isAuthenticated: true, 
+            role: user.role,
+            userId: user._id
+        });
+    } catch (error) {
+        console.error('Auth check error:', error);
+        return res.status(401).json({ isAuthenticated: false });
     }
 };
 
@@ -396,4 +444,5 @@ module.exports = {
     resetPassword,
     getUserProfile,
     updateProfile,
+    checkAuth  // Export the new function
 };

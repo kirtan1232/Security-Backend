@@ -18,6 +18,8 @@ const fs = require("fs"); // Add FS module to read certificates
 const app = express();
 const errorHandler = require('./middleware/errorhandler');
 const auditLogRoutes = require('./routes/auditLogRoutes'); // Import AuditLog model
+const cookieParser = require('cookie-parser');
+
 require('dotenv').config();
 // Connect to MongoDB
 connectDb();
@@ -29,6 +31,7 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true, // Allow credentials (cookies, authorization headers, etc.)
 }));
+app.use(cookieParser());
 
 // Body parser middleware
 app.use(express.json());

@@ -13,12 +13,14 @@ const esewaRoutes = require('./routes/esewaRoutes');
 const supportRoutes = require('./routes/supportRoutes');
 const songRequestRoutes = require('./routes/songRequestRoutes');
 const path = require("path");
-const https = require("https"); // Add HTTPS module
-const fs = require("fs"); // Add FS module to read certificates
+const https = require("https");
+const fs = require("fs");
 const app = express();
 const errorHandler = require('./middleware/errorhandler');
-const auditLogRoutes = require('./routes/auditLogRoutes'); // Import AuditLog model
+const auditLogRoutes = require('./routes/auditLogRoutes');
 const cookieParser = require('cookie-parser');
+const xss = require('xss-clean');         // XSS Prevention middleware
+const csurf = require('csurf');           // CSRF Protection middleware
 
 require('dotenv').config();
 // Connect to MongoDB
@@ -28,14 +30,31 @@ connectDb();
 app.use(cors({
     origin: 'https://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
     credentials: true, // Allow credentials (cookies, authorization headers, etc.)
 }));
+
+// Cookie parser
 app.use(cookieParser());
 
 // Body parser middleware
 app.use(express.json());
 
+// XSS Prevention middleware
+app.use(xss());
+
+// CSRF Protection middleware
+app.use(
+    csurf({
+      cookie: true,
+      ignoreMethods: ['GET', 'HEAD', 'OPTIONS'], // <-- add this line!
+    })
+  );
+
+// Expose CSRF token for frontend (SPA support)
+app.get('/api/csrf-token', (req, res) => {
+    res.json({ csrfToken: req.csrfToken() });
+});
 
 // Serve static files
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));

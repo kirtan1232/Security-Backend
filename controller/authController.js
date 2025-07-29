@@ -40,7 +40,8 @@ const registerUser = async (req, res) => {
             password: hashedPassword,
             role,
             profilePicture,
-            emailVerified: false
+            emailVerified: false,
+            passwordLastChanged: new Date() // Set on registration
         });
 
         await user.save();
@@ -215,8 +216,13 @@ const loginUser = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
-        // Keep sending token in response for localStorage compatibility
-        res.status(200).json({ message: 'Login successful', token, role: user.role });
+        // Send passwordLastChanged to frontend
+        res.status(200).json({
+            message: 'Login successful',
+            token,
+            role: user.role,
+            passwordLastChanged: user.passwordLastChanged // Add here
+        });
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Error logging in', error });
@@ -327,8 +333,18 @@ const resetPassword = async (req, res) => {
         if (!userData) {
             return res.status(404).send({ success: false, msg: "Invalid or expired token." });
         }
+        // --- Check if new password is same as old password ---
+        const isSame = await bcrypt.compare(newPassword, userData.password);
+        if (isSame) {
+            return res.status(400).send({ success: false, msg: "Please use another password." });
+        }
+        // --- End same password check ---
+
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        await User.updateOne({ _id: userData._id }, { $set: { password: hashedPassword, token: null } });
+        await User.updateOne(
+            { _id: userData._id },
+            { $set: { password: hashedPassword, token: null, passwordLastChanged: new Date() } } // Set here
+        );
 
         await createLog({
             user: userData._id,
@@ -337,7 +353,27 @@ const resetPassword = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
-        res.status(200).send({ success: true, msg: "Password reset successfully." });
+        // --- Option: Log the user in automatically (remove this if you want them to login manually) ---
+        const tokenJwt = jwt.sign(
+            { id: userData._id, email: userData.email, role: userData.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '1h' }
+        );
+        res.cookie('authToken', tokenJwt, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000
+        });
+        res.cookie('userRole', userData.role, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000
+        });
+        // -------------------------------------------------------
+
+        res.status(200).send({ success: true, msg: "Password reset successfully.", token: tokenJwt, role: userData.role });
     } catch (error) {
         console.error("Error in resetPassword:", error.message);
         return res.status(500).send({ success: false, msg: error.message });
@@ -412,6 +448,7 @@ const updateProfile = async (req, res) => {
                 return res.status(400).json({ message: "New password does not meet complexity requirements." });
             }
             user.password = await bcrypt.hash(newPassword, 10);
+            user.passwordLastChanged = new Date(); // Set here
             updatedFields.password = true;
         }
 

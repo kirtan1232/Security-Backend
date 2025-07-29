@@ -12,7 +12,9 @@ const userSchema = new mongoose.Schema({
     // --- OTP fields ---
     emailVerified: { type: Boolean, default: false },
     emailOTP: { type: String }, // will store 6-digit code as string
-    emailOTPExpires: { type: Date }
+    emailOTPExpires: { type: Date },
+    // --- Password Expiry ---
+    passwordLastChanged: { type: Date, default: Date.now }, // <--- Add this
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

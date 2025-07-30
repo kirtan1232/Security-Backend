@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { registerUser, loginUser, forgotPassword, resetPassword, sendResetPasswordMail, getUserProfile, updateProfile, checkAuth } = require('../controller/authController');
+const { registerUser, loginUser, forgotPassword, resetPassword, sendResetPasswordMail, getUserProfile, updateProfile, checkAuth, logoutUser } = require('../controller/authController');
 const { verifyToken, authorizeRole } = require('../middleware/authMiddleware');
 const rateLimit = require('express-rate-limit');
 const profileUpload = require("../middleware/profileUploadMiddleware");
@@ -31,15 +31,7 @@ router.get('/users', verifyToken, authorizeRole(['admin']), (req, res) => {
     User.find().select('createdAt role').then(users => res.json(users)).catch(err => res.status(500).json({ message: err.message }));
 });
 
-// Fix: Use verifyToken middleware and the checkAuth controller function
 router.get("/check-auth", verifyToken, checkAuth);
-
-// Add a logout route
-router.post('/logout', verifyToken, (req, res) => {
-    // Clear auth cookies
-    res.clearCookie('authToken');
-    res.clearCookie('userRole');
-    res.status(200).json({ message: 'Logout successful' });
-});
+router.post('/logout', verifyToken, logoutUser);
 
 module.exports = router;

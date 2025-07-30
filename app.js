@@ -19,47 +19,49 @@ const app = express();
 const errorHandler = require('./middleware/errorhandler');
 const auditLogRoutes = require('./routes/auditLogRoutes');
 const cookieParser = require('cookie-parser');
-const xss = require('xss-clean');         // XSS Prevention middleware
-const csurf = require('csurf');           // CSRF Protection middleware
+const xss = require('xss-clean');
+const crypto = require('crypto');
 
 require('dotenv').config();
-// Connect to MongoDB
 connectDb();
 
-// CORS configuration
 app.use(cors({
     origin: 'https://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
-    credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+    credentials: true,
 }));
 
-// Cookie parser
 app.use(cookieParser());
-
-// Body parser middleware
 app.use(express.json());
-
-// XSS Prevention middleware
 app.use(xss());
 
-// CSRF Protection middleware
-app.use(
-    csurf({
-      cookie: true,
-      ignoreMethods: ['GET', 'HEAD', 'OPTIONS'], // <-- add this line!
-    })
-  );
-
-// Expose CSRF token for frontend (SPA support)
+// Custom CSRF token generation
 app.get('/api/csrf-token', (req, res) => {
-    res.json({ csrfToken: req.csrfToken() });
+    const csrfToken = crypto.randomBytes(32).toString('hex');
+    res.cookie('csrfToken', csrfToken, {
+        httpOnly: false,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: 3600000 // 1 hour
+    });
+    res.json({ csrfToken });
 });
 
-// Serve static files
+// Middleware to validate CSRF token for non-safe methods
+app.use((req, res, next) => {
+    if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
+        const csrfToken = req.headers['x-csrf-token'];
+        const cookieCsrfToken = req.cookies.csrfToken;
+        if (!csrfToken || csrfToken !== cookieCsrfToken) {
+            return res.status(403).json({ message: 'Invalid CSRF token' });
+        }
+    }
+    next();
+});
+
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
 
-// Routes
 app.use("/api/auth", AuthRouter);
 app.use("/api/protected", protectedRouter);
 app.use("/api/songs", songRoutes);
@@ -73,7 +75,6 @@ app.use('/api/support', supportRoutes);
 app.use('/api/song-requests', songRequestRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
 
-// Handle 404
 app.use((req, res) => {
     res.status(404).json({ message: "Route not found" });
 });
@@ -82,7 +83,6 @@ app.use(errorHandler);
 
 const port = 3000;
 
-// Create HTTPS server
 const options = {
     key: fs.readFileSync('./certs/key.pem'),
     cert: fs.readFileSync('./certs/cert.pem'),

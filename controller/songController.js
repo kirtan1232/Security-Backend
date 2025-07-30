@@ -29,7 +29,7 @@ exports.createSong = async (req, res) => {
             docxFiles = req.files.docxFiles.map(file => {
                 const newFileName = path.basename(file.filename);
                 const newFilePath = path.join('uploads', newFileName);
-                console.log("DOCX File Path:", newFilePath);
+                
                 return newFilePath;
             });
 

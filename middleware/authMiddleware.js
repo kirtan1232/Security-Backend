@@ -1,25 +1,24 @@
 const jwt = require('jsonwebtoken');
 
-// Middleware to verify JWT
 const verifyToken = (req, res, next) => {
-    const authHeader = req.header('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Access Denied: No token provided' });
+    let token = null;
+    // Try to get token from cookie
+    if (req.cookies && req.cookies.authToken) {
+        token = req.cookies.authToken;
     }
-
-    const token = authHeader.split(' ')[1]; // Remove "Bearer " prefix
-
+    // Optionally, also check Authorization header for API tools
+    if (!token && req.header('Authorization') && req.header('Authorization').startsWith('Bearer ')) {
+        token = req.header('Authorization').split(' ')[1];
+    }
+    if (!token) return res.status(401).json({ message: 'Access Denied: No token provided' });
     try {
-        const verified = jwt.verify(token, process.env.JWT_SECRET || 'your_secret_key');
-        req.user = verified; // Attach user info to request object
+        req.user = jwt.verify(token, process.env.JWT_SECRET);
         next();
     } catch (err) {
-        res.status(400).json({ message: 'Invalid Token' });
+        res.status(401).json({ message: 'Invalid Token' });
     }
 };
 
-
-// Middleware to authorize roles
 const authorizeRole = (roles) => (req, res, next) => {
     if (!roles.includes(req.user.role)) {
         return res.status(403).json({ message: 'Forbidden: Access is restricted to specific roles' });

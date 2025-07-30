@@ -10,8 +10,8 @@ require('dotenv').config();
 const { fromBuffer } = require("file-type");
 const { generateAndSendOTP } = require('./otpController');
 const fs = require("fs");
+const crypto = require('crypto');
 
-// Register a new user
 const registerUser = async (req, res) => {
     const { name, email, password, role } = req.body;
     const profilePicture = req.file ? req.file.path : null;
@@ -41,7 +41,7 @@ const registerUser = async (req, res) => {
             role,
             profilePicture,
             emailVerified: false,
-            passwordLastChanged: new Date() // Set on registration
+            passwordLastChanged: new Date()
         });
 
         await user.save();
@@ -62,9 +62,8 @@ const registerUser = async (req, res) => {
     }
 };
 
-// Login user
 const loginUser = async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, captchaToken } = req.body;
     try {
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ message: 'User does not exist' });
@@ -97,7 +96,7 @@ const loginUser = async (req, res) => {
             user.failedLoginAttempts = 0;
             try {
                 await user.save();
-                console.log(`Lock reset successful for user ${user.email}, new lockUntil: ${user.lockUntil}, failedLoginAttempts: ${user.failedLoginAttempts}`);
+                
             } catch (error) {
                 console.error(`Error resetting lock for user ${user.email}:`, error);
                 return res.status(500).json({ message: 'Server error during lock reset' });
@@ -114,7 +113,7 @@ const loginUser = async (req, res) => {
                 user.failedLoginAttempts = 0; // Reset attempts to avoid accumulation
                 try {
                     await user.save();
-                    console.log(`Account locked for user ${user.email}, lockUntil: ${user.lockUntil}`);
+                    
                 } catch (error) {
                     console.error(`Error saving lock for user ${user.email}:`, error);
                     return res.status(500).json({ message: 'Server error during account lock' });
@@ -141,7 +140,7 @@ const loginUser = async (req, res) => {
             } else {
                 try {
                     await user.save();
-                    console.log(`Saved failed login attempt for user ${user.email}, attempts: ${user.failedLoginAttempts}`);
+                   
                 } catch (error) {
                     console.error(`Error saving failed login attempt for user ${user.email}:`, error);
                     return res.status(500).json({ message: 'Server error during login attempt' });
@@ -171,7 +170,7 @@ const loginUser = async (req, res) => {
         user.lockUntil = null;
         try {
             await user.save();
-            console.log(`Successful login for user ${user.email}, counters reset`);
+            
         } catch (error) {
             console.error(`Error saving user after successful login for ${user.email}:`, error);
             return res.status(500).json({ message: 'Server error after successful login' });
@@ -192,13 +191,22 @@ const loginUser = async (req, res) => {
         // Set authentication cookie
         res.cookie('authToken', token, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production', // Only in production
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 3600000 // 1 hour in milliseconds
+            maxAge: 3600000 // 1 hour
         });
         
-        // Set role cookie (accessible to JavaScript)
+        // Set role cookie
         res.cookie('userRole', user.role, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000 // 1 hour
+        });
+
+        // Set CSRF token cookie after successful login
+        const csrfToken = crypto.randomBytes(32).toString('hex');
+        res.cookie('csrfToken', csrfToken, {
             httpOnly: false,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
@@ -216,12 +224,12 @@ const loginUser = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
-        // Send passwordLastChanged to frontend
         res.status(200).json({
             message: 'Login successful',
             token,
             role: user.role,
-            passwordLastChanged: user.passwordLastChanged // Add here
+            passwordLastChanged: user.passwordLastChanged,
+            csrfToken
         });
     } catch (error) {
         console.error('Login error:', error);
@@ -229,7 +237,6 @@ const loginUser = async (req, res) => {
     }
 };
 
-// Logout user
 const logoutUser = async (req, res) => {
     try {
         await createLog({
@@ -239,9 +246,25 @@ const logoutUser = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
         
-        // Clear authentication cookies
-        res.clearCookie('authToken');
-        res.clearCookie('userRole');
+        // Clear all authentication-related cookies with explicit options
+        res.clearCookie('authToken', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/'
+        });
+        res.clearCookie('userRole', {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/'
+        });
+        res.clearCookie('csrfToken', {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/'
+        });
         
         res.status(200).json({ message: 'Logout successful' });
     } catch (error) {
@@ -250,7 +273,6 @@ const logoutUser = async (req, res) => {
     }
 };
 
-// Check authentication status
 const checkAuth = async (req, res) => {
     try {
         const token = req.cookies.authToken;
@@ -264,11 +286,21 @@ const checkAuth = async (req, res) => {
         if (!user) {
             return res.status(401).json({ isAuthenticated: false });
         }
+
+        // Generate and set a new CSRF token
+        const csrfToken = crypto.randomBytes(32).toString('hex');
+        res.cookie('csrfToken', csrfToken, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000 // 1 hour
+        });
         
         return res.status(200).json({ 
             isAuthenticated: true, 
             role: user.role,
-            userId: user._id
+            userId: user._id,
+            csrfToken
         });
     } catch (error) {
         console.error('Auth check error:', error);
@@ -276,7 +308,6 @@ const checkAuth = async (req, res) => {
     }
 };
 
-// Forgot password
 const forgotPassword = async (req, res) => {
     const email = req.body.email;
     try {
@@ -322,7 +353,6 @@ const sendResetPasswordMail = (name, email, token) => {
     });
 };
 
-// Reset password
 const resetPassword = async (req, res) => {
     const { token, newPassword } = req.body;
     try {
@@ -333,17 +363,15 @@ const resetPassword = async (req, res) => {
         if (!userData) {
             return res.status(404).send({ success: false, msg: "Invalid or expired token." });
         }
-        // --- Check if new password is same as old password ---
         const isSame = await bcrypt.compare(newPassword, userData.password);
         if (isSame) {
             return res.status(400).send({ success: false, msg: "Please use another password." });
         }
-        // --- End same password check ---
 
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await User.updateOne(
             { _id: userData._id },
-            { $set: { password: hashedPassword, token: null, passwordLastChanged: new Date() } } // Set here
+            { $set: { password: hashedPassword, token: null, passwordLastChanged: new Date() } }
         );
 
         await createLog({
@@ -353,7 +381,6 @@ const resetPassword = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
 
-        // --- Option: Log the user in automatically (remove this if you want them to login manually) ---
         const tokenJwt = jwt.sign(
             { id: userData._id, email: userData.email, role: userData.role },
             process.env.JWT_SECRET,
@@ -371,16 +398,21 @@ const resetPassword = async (req, res) => {
             sameSite: 'strict',
             maxAge: 3600000
         });
-        // -------------------------------------------------------
+        const csrfToken = crypto.randomBytes(32).toString('hex');
+        res.cookie('csrfToken', csrfToken, {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            maxAge: 3600000
+        });
 
-        res.status(200).send({ success: true, msg: "Password reset successfully.", token: tokenJwt, role: userData.role });
+        res.status(200).send({ success: true, msg: "Password reset successfully.", token: tokenJwt, role: userData.role, csrfToken });
     } catch (error) {
         console.error("Error in resetPassword:", error.message);
         return res.status(500).send({ success: false, msg: error.message });
     }
 };
 
-// Fetch User Profile (excluding password)
 const getUserProfile = async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
@@ -394,7 +426,6 @@ const getUserProfile = async (req, res) => {
     }
 };
 
-// Update Profile
 const updateProfile = async (req, res) => {
     const { name, email, about, oldPassword, newPassword } = req.body;
     const userId = req.user.id;
@@ -448,7 +479,7 @@ const updateProfile = async (req, res) => {
                 return res.status(400).json({ message: "New password does not meet complexity requirements." });
             }
             user.password = await bcrypt.hash(newPassword, 10);
-            user.passwordLastChanged = new Date(); // Set here
+            user.passwordLastChanged = new Date();
             updatedFields.password = true;
         }
 
@@ -466,7 +497,7 @@ const updateProfile = async (req, res) => {
         delete safeUser.password;
         res.status(200).json({ message: 'Profile updated successfully', user: safeUser });
     } catch (err) {
-        console.log("Error updating profile:", err.message);
+        
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.status(500).json({ message: 'Error updating profile' });
     }
@@ -481,5 +512,5 @@ module.exports = {
     resetPassword,
     getUserProfile,
     updateProfile,
-    checkAuth  // Export the new function
+    checkAuth
 };

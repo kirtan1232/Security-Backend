@@ -47,7 +47,7 @@ const toggleFavoriteSong = async (req, res) => {
 
         await favorite.save();
         // Log for debugging (remove after testing)
-        console.log('Updated songIds:', favorite.songIds);
+        
         res.status(200).json({ message: "Favorite toggled successfully", favorite });
     } catch (error) {
         res.status(500).json({ error: "Failed to toggle favorite" });

@@ -7,7 +7,7 @@ const auth = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, "220000094141232"); // Replace with your JWT secret
+    const decoded = jwt.verify(token, "220000094141232"); 
     req.user = decoded;
     next();
   } catch (error) {

@@ -21,6 +21,7 @@ const auditLogRoutes = require('./routes/auditLogRoutes');
 const cookieParser = require('cookie-parser');
 const xss = require('xss-clean');
 const crypto = require('crypto');
+const mongoSanitize = require('express-mongo-sanitize'); 
 
 require('dotenv').config();
 connectDb();
@@ -35,20 +36,20 @@ app.use(cors({
 app.use(cookieParser());
 app.use(express.json());
 app.use(xss());
+app.use(mongoSanitize());
 
-// Custom CSRF token generation
+
 app.get('/api/csrf-token', (req, res) => {
     const csrfToken = crypto.randomBytes(32).toString('hex');
     res.cookie('csrfToken', csrfToken, {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 3600000 // 1 hour
+        maxAge: 3600000 
     });
     res.json({ csrfToken });
 });
 
-// Middleware to validate CSRF token for non-safe methods
 app.use((req, res, next) => {
     if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
         const csrfToken = req.headers['x-csrf-token'];
@@ -88,6 +89,6 @@ const options = {
     cert: fs.readFileSync('./certs/cert.pem'),
 };
 
-https.createServer(options, app).listen(port, () => {
-    console.log(`Server running at https://localhost:${port}`);
+https.createServer(options, app).listen(port, '0.0.0.0', () => {
+  
 });

@@ -1,7 +1,7 @@
 const multer = require('multer');
 
 function errorHandler(err, req, res, next) {
-    // Handle Multer-specific errors
+ 
     if (err instanceof multer.MulterError || (
         err instanceof Error &&
         (
@@ -12,7 +12,7 @@ function errorHandler(err, req, res, next) {
     )) {
         return res.status(400).json({ message: err.message });
     }
-    // For other errors, do NOT log to console
+  
     res.status(500).json({ message: err.message || "An unexpected error occurred." });
 }
 

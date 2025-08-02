@@ -8,13 +8,13 @@ const userSchema = new mongoose.Schema({
     profilePicture: { type: String },
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date },
-    token: { type: String, default: '' }, // For password reset
+    token: { type: String, default: '' }, 
     // --- OTP fields ---
     emailVerified: { type: Boolean, default: false },
-    emailOTP: { type: String }, // will store 6-digit code as string
+    emailOTP: { type: String }, 
     emailOTPExpires: { type: Date },
     // --- Password Expiry ---
-    passwordLastChanged: { type: Date, default: Date.now }, // <--- Add this
+    passwordLastChanged: { type: Date, default: Date.now },
 }, { timestamps: true });
 
 const User = mongoose.model('User', userSchema);

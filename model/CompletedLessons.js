@@ -6,7 +6,7 @@ const CompletedLessonsSchema = new mongoose.Schema({
     {
       day: { type: String, required: true },
       instrument: { type: String, required: true },
-      completedAt: { type: Date, default: Date.now }, // Added field
+      completedAt: { type: Date, default: Date.now }, 
     },
   ],
 });

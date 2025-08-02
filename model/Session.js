@@ -29,11 +29,11 @@ const sessionSchema = new mongoose.Schema({
         required: true
     },
     file: {
-        type: String, // Store file URL (after upload to a storage server like AWS S3 or local)
+        type: String, 
         default: null
     }
 }, {
-    timestamps: true // Automatically adds createdAt and updatedAt fields
+    timestamps: true 
 });
 
 const Session = mongoose.model('Session', sessionSchema);

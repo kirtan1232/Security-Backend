@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const favoritesController = require('../controller/favoritesController'); // Adjust the path as necessary
+const favoritesController = require('../controller/favoritesController'); 
 const { verifyToken } = require('../middleware/authMiddleware');
 
-router.get('/getfav', verifyToken, favoritesController.getFavorites); // Get favorites
-router.post('/songs', verifyToken, favoritesController.toggleFavoriteSong); // Add/remove song favorite
+router.get('/getfav', verifyToken, favoritesController.getFavorites); 
+router.post('/songs', verifyToken, favoritesController.toggleFavoriteSong); 
 module.exports = router;

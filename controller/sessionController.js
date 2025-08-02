@@ -2,7 +2,7 @@ const Session = require('../model/Session');
 const fs = require('fs');
 const path = require('path');
 
-// Add a new practice session
+
 exports.createSession = async (req, res) => {
     try {
       const { instrument, day, title, description, duration, instructions, mediaUrl } = req.body;
@@ -26,7 +26,7 @@ exports.createSession = async (req, res) => {
     }
   };
 
-// Update a practice session
+
 exports.updateSession = async (req, res) => {
     try {
         const { instrument, day, title, description, duration, instructions, mediaUrl } = req.body;
@@ -47,7 +47,7 @@ exports.updateSession = async (req, res) => {
                     try {
                         fs.unlinkSync(oldFilePath);
                     } catch (err) {
-                        // Silent catch
+                        
                     }
                 }
             }
@@ -59,7 +59,7 @@ exports.updateSession = async (req, res) => {
                     try {
                         fs.unlinkSync(oldFilePath);
                     } catch (err) {
-                        // Silent catch
+                      
                     }
                 }
             }
@@ -77,7 +77,7 @@ exports.updateSession = async (req, res) => {
     }
 };
 
-// Delete a practice session
+
 exports.deleteSession = async (req, res) => {
     try {
         const session = await Session.findById(req.params.id);
@@ -91,7 +91,7 @@ exports.deleteSession = async (req, res) => {
                 try {
                     fs.unlinkSync(filePath);
                 } catch (err) {
-                    // Silent catch
+                   
                 }
             }
         }
@@ -103,7 +103,7 @@ exports.deleteSession = async (req, res) => {
     }
 };
 
-// Get all practice sessions
+
 exports.getAllSessions = async (req, res) => {
     try {
         const sessions = await Session.find();

@@ -7,7 +7,7 @@ const profileUpload = require("../middleware/profileUploadMiddleware");
 const { verifyEmailOTP } = require('../controller/otpController');
 const User = require('../model/User');
 
-// Rate limiter for login
+
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, max: 5,
     message: { message: "Too many login attempts. Try again later." }

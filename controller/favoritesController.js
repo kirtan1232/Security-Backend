@@ -26,7 +26,7 @@ const toggleFavoriteSong = async (req, res) => {
     }
 
     try {
-        // Validate songId
+        
         const songExists = await Song.findById(songId);
         if (!songExists) {
             return res.status(400).json({ error: "Invalid song ID" });
@@ -37,7 +37,7 @@ const toggleFavoriteSong = async (req, res) => {
             favorite = new Favorite({ userId, songIds: [], lessonIds: [] });
         }
 
-        // Ensure string comparison
+        
         const songIdStr = songId.toString();
         if (favorite.songIds.some(id => id.toString() === songIdStr)) {
             favorite.songIds = favorite.songIds.filter(id => id.toString() !== songIdStr);
@@ -46,7 +46,7 @@ const toggleFavoriteSong = async (req, res) => {
         }
 
         await favorite.save();
-        // Log for debugging (remove after testing)
+        
         
         res.status(200).json({ message: "Favorite toggled successfully", favorite });
     } catch (error) {

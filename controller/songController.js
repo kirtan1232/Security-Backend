@@ -3,13 +3,13 @@ const path = require('path');
 const fs = require('fs');
 const parseDocxText = require("../utils/parseDocxText");
 
-// Create a new song
+
 exports.createSong = async (req, res) => {
     try {
         const { songName, selectedInstrument, lyrics } = req.body;
         let chordDiagrams = [];
 
-        // Parse lyrics as JSON
+       
         let parsedLyrics;
         try {
             parsedLyrics = JSON.parse(lyrics);
@@ -17,12 +17,12 @@ exports.createSong = async (req, res) => {
             return res.status(400).json({ message: "Invalid lyrics format. Ensure JSON format." });
         }
 
-        // Handle uploaded chord diagrams
+       
         if (req.files?.chordDiagrams) {
             chordDiagrams = req.files.chordDiagrams.map(file => path.join('uploads', path.basename(file.path)));
         }
 
-        // Handle DOCX parsing and update the filenames
+       
         let docxText = [];
         let docxFiles = [];
         if (req.files?.docxFiles) {
@@ -33,7 +33,7 @@ exports.createSong = async (req, res) => {
                 return newFilePath;
             });
 
-            // Parse each DOCX file and extract only the lyrics text
+            
             try {
                 docxText = await Promise.all(docxFiles.map(async (filePath) => {
                     const parsedDoc = await parseDocxText(filePath);
@@ -46,7 +46,7 @@ exports.createSong = async (req, res) => {
             }
         }
 
-        // Combine DOCX parsed content with the original lyrics
+        
         parsedLyrics.forEach((verse, index) => {
             if (docxText[index]) {
                 verse.parsedDocxFile = docxText[index].split('\n').filter(line => line.trim());
@@ -55,7 +55,7 @@ exports.createSong = async (req, res) => {
             }
         });
 
-        // Create and save the new song
+       
         const newSong = new Song({
             songName,
             selectedInstrument,
@@ -72,7 +72,6 @@ exports.createSong = async (req, res) => {
     }
 };
 
-// Fetch a single song by ID
 exports.getSongById = async (req, res) => {
     const songId = req.params.id;
 
@@ -104,7 +103,7 @@ exports.getSongById = async (req, res) => {
     }
 };
 
-// Update an existing song
+
 exports.updateSong = async (req, res) => {
     try {
         const { songName, selectedInstrument } = req.body;
@@ -128,7 +127,7 @@ exports.updateSong = async (req, res) => {
     }
 };
 
-// Fetch all songs
+
 exports.getAllSongs = async (req, res) => {
     try {
         const { instrument } = req.query;
@@ -145,7 +144,7 @@ exports.getAllSongs = async (req, res) => {
     }
 };
 
-// Parse DOCX file
+
 exports.parseDocxFile = async (req, res) => {
     try {
         const docxFilePath = req.files.docxFile[0].path;
@@ -157,7 +156,7 @@ exports.parseDocxFile = async (req, res) => {
     }
 };
 
-// Delete a song
+
 exports.deleteSong = async (req, res) => {
     try {
         const songId = req.params.id;

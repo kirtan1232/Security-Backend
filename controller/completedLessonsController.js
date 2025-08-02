@@ -1,5 +1,5 @@
 const CompletedLessons = require("../model/CompletedLessons");
-const { createLog } = require("./auditLogController"); // Import audit log utility
+const { createLog } = require("./auditLogController"); 
 
 exports.getCompletedLessons = async (req, res) => {
   try {

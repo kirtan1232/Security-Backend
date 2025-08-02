@@ -1,10 +1,10 @@
 const multer = require('multer');
 const path = require('path');
 
-// Configure storage for uploaded files
+
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Ensure this directory exists
+        cb(null, 'uploads/'); 
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -25,17 +25,17 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
-// Multer configuration
+
 const upload = multer({
     storage: storage,
     limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB limit per file
-        files: 10 // Maximum 10 files per request
+        fileSize: 5 * 1024 * 1024, 
+        files: 10 
     },
     fileFilter: fileFilter
 });
 
-// Middleware to handle multiple image uploads
-const uploadMiddleware = upload.array('chordDiagrams', 10); // 'chordDiagrams' field, max 10 files
+
+const uploadMiddleware = upload.array('chordDiagrams', 10); 
 
 module.exports = uploadMiddleware;

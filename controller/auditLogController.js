@@ -1,6 +1,5 @@
 const AuditLog = require('../model/AuditLog');
 
-// Create a log entry (for use in other controllers)
 exports.createLog = async ({ user, action, details = {}, ip, userAgent }) => {
   try {
     await AuditLog.create({
@@ -11,15 +10,15 @@ exports.createLog = async ({ user, action, details = {}, ip, userAgent }) => {
       userAgent
     });
   } catch (err) {
-    // Consider logging this error to a separate log file or monitoring system
+    
     console.error('Failed to write audit log:', err.message);
   }
 };
 
-// Admin: Get all logs (with filter options)
+
 exports.getAuditLogs = async (req, res) => {
   try {
-    // Add RBAC check: only allow admin to access logs
+    
     if (!req.user || req.user.role !== 'admin') {
       return res.status(403).json({ message: 'Forbidden' });
     }

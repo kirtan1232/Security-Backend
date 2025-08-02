@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const uploadMiddleware = require("../middleware/quizmulter");
-const quizController = require("../controller/quizController"); // Adjust path based on your structure
+const quizController = require("../controller/quizController"); 
 
 router.post("/addquiz", uploadMiddleware, quizController.createQuiz);
 router.get("/getquiz", quizController.getQuizzesByDayAndInstrument);

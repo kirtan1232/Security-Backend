@@ -1,7 +1,6 @@
 const Support = require("../model/supportModel");
 
-// Create a new support record after successful payment
-// Create a new support record after successful payment
+
 exports.createSupportRecord = async (req, res) => {
   try {
     const { amount, nameOrSocial, message } = req.body;
@@ -13,11 +12,11 @@ exports.createSupportRecord = async (req, res) => {
       });
     }
 
-    // Check for duplicate records within a short time window
+   
     const existingRecord = await Support.findOne({
       amount: Number(amount),
       nameOrSocial: String(nameOrSocial).trim(),
-      createdAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) } // 5 minutes window
+      createdAt: { $gt: new Date(Date.now() - 5 * 60 * 1000) } 
     });
 
     if (existingRecord) {
@@ -46,7 +45,7 @@ exports.createSupportRecord = async (req, res) => {
     });
   }
 };
-// Get all support records
+
 exports.getSupportRecords = async (req, res) => {
   try {
     const supportRecords = await Support.find().sort({ createdAt: -1 });

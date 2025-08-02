@@ -9,18 +9,27 @@ const { createLog } = require('./auditLogController');
 require('dotenv').config();
 const { fromBuffer } = require("file-type");
 const { generateAndSendOTP } = require('./otpController');
+const { sendMail, generateStyledMail } = require('../utils/mail');
 const fs = require("fs");
 const crypto = require('crypto');
+const validator = require('validator'); 
 
 const registerUser = async (req, res) => {
-    const { name, email, password, role } = req.body;
+    let { name, email, password, role } = req.body;
     const profilePicture = req.file ? req.file.path : null;
 
     try {
+        
+        if (!validator.isEmail(email)) {
+            return res.status(400).json({ message: 'Invalid email address.' });
+        }
+        name = validator.escape(name || "");
+        role = validator.escape(role || "");
+
         if (!isStrongPassword(password)) {
             return res.status(400).json({ message: 'Password should be at least 8 characters.' });
         }
-        const userExist = await User.findOne({ email });
+        const userExist = await User.findOne({ email: email });
         if (userExist) {
             return res.status(400).json({ message: 'User already exists' });
         }
@@ -63,12 +72,16 @@ const registerUser = async (req, res) => {
 };
 
 const loginUser = async (req, res) => {
-    const { email, password, captchaToken } = req.body;
+    let { email, password, captchaToken } = req.body;
     try {
-        const user = await User.findOne({ email });
+        
+        if (!validator.isEmail(email)) {
+            return res.status(400).json({ message: 'Invalid email address.' });
+        }
+        const user = await User.findOne({ email: email });
         if (!user) return res.status(400).json({ message: 'User does not exist' });
 
-        // --- LOCKOUT CHECK & RESET ---
+        
         if (user.lockUntil && user.lockUntil > Date.now()) {
             const timeRemaining = Math.ceil((user.lockUntil - Date.now()) / 1000);
             await createLog({
@@ -90,13 +103,12 @@ const loginUser = async (req, res) => {
             });
         }
 
-        // If lock expired, reset counters
+       
         if (user.lockUntil && user.lockUntil <= Date.now()) {
             user.lockUntil = null;
             user.failedLoginAttempts = 0;
             try {
                 await user.save();
-                
             } catch (error) {
                 console.error(`Error resetting lock for user ${user.email}:`, error);
                 return res.status(500).json({ message: 'Server error during lock reset' });
@@ -107,13 +119,11 @@ const loginUser = async (req, res) => {
         if (!isPasswordValid) {
             user.failedLoginAttempts += 1;
             
-            // Check if we should lock the account
             if (user.failedLoginAttempts >= 5) {
-                user.lockUntil = new Date(Date.now() + 2 * 60 * 1000); // Lock for 2 minutes
-                user.failedLoginAttempts = 0; // Reset attempts to avoid accumulation
+                user.lockUntil = new Date(Date.now() + 2 * 60 * 1000); 
+                user.failedLoginAttempts = 0; 
                 try {
                     await user.save();
-                    
                 } catch (error) {
                     console.error(`Error saving lock for user ${user.email}:`, error);
                     return res.status(500).json({ message: 'Server error during account lock' });
@@ -140,7 +150,6 @@ const loginUser = async (req, res) => {
             } else {
                 try {
                     await user.save();
-                   
                 } catch (error) {
                     console.error(`Error saving failed login attempt for user ${user.email}:`, error);
                     return res.status(500).json({ message: 'Server error during login attempt' });
@@ -165,18 +174,17 @@ const loginUser = async (req, res) => {
             }
         }
 
-        // Successful login - reset counters
+        
         user.failedLoginAttempts = 0;
         user.lockUntil = null;
         try {
             await user.save();
-            
         } catch (error) {
             console.error(`Error saving user after successful login for ${user.email}:`, error);
             return res.status(500).json({ message: 'Server error after successful login' });
         }
 
-        // --- EMAIL VERIFICATION CHECK ---
+        
         if (!user.emailVerified) {
             await generateAndSendOTP(user);
             return res.status(403).json({ message: 'Please verify your email.', userId: user._id });
@@ -188,29 +196,29 @@ const loginUser = async (req, res) => {
             { expiresIn: '1h' }
         );
 
-        // Set authentication cookie
+      
         res.cookie('authToken', token, {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 3600000 // 1 hour
+            maxAge: 3600000 
         });
         
-        // Set role cookie
+        
         res.cookie('userRole', user.role, {
             httpOnly: false,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 3600000 // 1 hour
+            maxAge: 3600000 
         });
 
-        // Set CSRF token cookie after successful login
+       
         const csrfToken = crypto.randomBytes(32).toString('hex');
         res.cookie('csrfToken', csrfToken, {
             httpOnly: false,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 3600000 // 1 hour
+            maxAge: 3600000 
         });
 
         await createLog({
@@ -246,7 +254,6 @@ const logoutUser = async (req, res) => {
             userAgent: req.headers['user-agent']
         });
         
-        // Clear all authentication-related cookies with explicit options
         res.clearCookie('authToken', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
@@ -287,13 +294,13 @@ const checkAuth = async (req, res) => {
             return res.status(401).json({ isAuthenticated: false });
         }
 
-        // Generate and set a new CSRF token
+        
         const csrfToken = crypto.randomBytes(32).toString('hex');
         res.cookie('csrfToken', csrfToken, {
             httpOnly: false,
             secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            maxAge: 3600000 // 1 hour
+            maxAge: 3600000 
         });
         
         return res.status(200).json({ 
@@ -311,12 +318,16 @@ const checkAuth = async (req, res) => {
 const forgotPassword = async (req, res) => {
     const email = req.body.email;
     try {
-        const userData = await User.findOne({ email });
+        // Validate email input
+        if (!validator.isEmail(email)) {
+            return res.status(400).send({ success: false, msg: "Invalid email address." });
+        }
+        const userData = await User.findOne({ email: email });
         if (!userData) {
             return res.status(404).send({ success: false, msg: "This email does not exist." });
         }
         const randomToken = randomstring.generate();
-        await User.updateOne({ email }, { $set: { token: randomToken } });
+        await User.updateOne({ email: email }, { $set: { token: randomToken } });
         sendResetPasswordMail(userData.name, userData.email, randomToken);
 
         await createLog({
@@ -333,23 +344,20 @@ const forgotPassword = async (req, res) => {
     }
 };
 
-const sendResetPasswordMail = (name, email, token) => {
+const sendResetPasswordMail = async (name, email, token) => {
     if (!email) return;
-    const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false,
-        requireTLS: true,
-        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD },
+    const resetUrl = `https://localhost:5173/resetPassword?token=${token}`;
+    const html = generateStyledMail({
+        title: "Password Reset Request",
+        message: `Hi <b>${name}</b>,<br>We received a request to reset your password. Click below to set a new password:`,
+        buttonText: "Reset Password",
+        buttonUrl: resetUrl,
+        footer: "If you did not request a password reset, you can safely ignore this email."
     });
-    const mailOptions = {
-        from: process.env.EMAIL_USER,
+    await sendMail({
         to: email,
-        subject: 'Password Reset Request',
-        html: `<p>Hi ${name},<br/>You requested a password reset. <a href="https://localhost:5173/resetPassword?token=${token}">Reset Password</a></p>`
-    };
-    transporter.sendMail(mailOptions, (error, info) => {
-        if (error) console.error("Error sending email:", error.message);
+        subject: "Password Reset Request",
+        html
     });
 };
 
@@ -359,7 +367,7 @@ const resetPassword = async (req, res) => {
         if (!isStrongPassword(newPassword)) {
             return res.status(400).send({ success: false, msg: "Password does not meet complexity requirements." });
         }
-        const userData = await User.findOne({ token });
+        const userData = await User.findOne({ token: token });
         if (!userData) {
             return res.status(404).send({ success: false, msg: "Invalid or expired token." });
         }
@@ -427,7 +435,7 @@ const getUserProfile = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-    const { name, email, about, oldPassword, newPassword } = req.body;
+    let { name, email, about, oldPassword, newPassword } = req.body;
     const userId = req.user.id;
     let profilePicture = req.file ? req.file.path : null;
 
@@ -451,16 +459,16 @@ const updateProfile = async (req, res) => {
         const updatedFields = {};
 
         if (typeof name === "string" && name.trim() !== "") {
-            user.name = name.trim();
-            updatedFields.name = name.trim();
+            user.name = validator.escape(name.trim());
+            updatedFields.name = user.name;
         }
-        if (typeof email === "string" && email.trim() !== "") {
+        if (typeof email === "string" && email.trim() !== "" && validator.isEmail(email.trim())) {
             user.email = email.trim();
             updatedFields.email = email.trim();
         }
         if (typeof about === "string") {
-            user.about = about.trim();
-            updatedFields.about = about.trim();
+            user.about = validator.escape(about.trim());
+            updatedFields.about = user.about;
         }
         if (profilePicture) {
             user.profilePicture = profilePicture;
@@ -497,7 +505,6 @@ const updateProfile = async (req, res) => {
         delete safeUser.password;
         res.status(200).json({ message: 'Profile updated successfully', user: safeUser });
     } catch (err) {
-        
         if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         res.status(500).json({ message: 'Error updating profile' });
     }

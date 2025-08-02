@@ -1,5 +1,5 @@
 const CompletedSessions = require("../model/CompletedSessions");
-const { createLog } = require("./auditLogController"); // Import audit log utility
+const { createLog } = require("./auditLogController"); 
 
 exports.getCompletedSessions = async (req, res) => {
   try {

@@ -6,7 +6,7 @@ const songSchema = new mongoose.Schema({
     lyrics: [{
         section: String,
         lyrics: String,
-        parsedDocxFile: [String],  // Array of strings for each lyric's parsed DOCX content
+        parsedDocxFile: [String],  
     }],
     chordDiagrams: [String],
     docxFiles: [String],
@@ -14,5 +14,5 @@ const songSchema = new mongoose.Schema({
 
 const Song = mongoose.model("Song", songSchema);
 
-// Correct export statement
+
 module.exports = Song;

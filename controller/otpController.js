@@ -1,13 +1,14 @@
 const User = require('../model/User');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const { generateOtpEmailHtml } = require('../utils/otp');
 
 require('dotenv').config();
 
-// Helper: Hash the OTP
+
 const hashOTP = (otp) => crypto.createHash('sha256').update(otp).digest('hex');
 
-// Helper: Send OTP email
+
 const sendVerificationOTP = async (name, email, otp) => {
     if (!email) return;
     const transporter = nodemailer.createTransport({
@@ -21,12 +22,11 @@ const sendVerificationOTP = async (name, email, otp) => {
         from: process.env.EMAIL_USER,
         to: email,
         subject: 'Verify your Anna Account',
-        html: `<p>Hi ${name},<br/>Your verification code is: <b>${otp}</b>. It expires in 10 minutes.<br/>Enter this code in Anna to verify your account.</p>`
+        html: generateOtpEmailHtml({ name, otp })
     };
     await transporter.sendMail(mailOptions);
 };
 
-// Generate and send OTP (store hash)
 const generateAndSendOTP = async (user) => {
     const plainOtp = Math.floor(100000 + Math.random() * 900000).toString();
     const otpHash = hashOTP(plainOtp);
@@ -37,7 +37,7 @@ const generateAndSendOTP = async (user) => {
     await sendVerificationOTP(user.name, user.email, plainOtp);
 };
 
-// Verify OTP (compare hash)
+
 const verifyEmailOTP = async (req, res) => {
     const { userId, otp } = req.body;
     try {

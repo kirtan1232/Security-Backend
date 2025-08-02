@@ -5,7 +5,7 @@ exports.createQuiz = async (req, res) => {
     const { quizData } = req.body;
     const parsedQuizData = JSON.parse(quizData);
 
-    // Map files to quizzesz
+    
     if (req.files && req.files.length > 0) {
       parsedQuizData.quizzes.forEach((quiz, index) => {
         if (req.files[index]) {
@@ -15,7 +15,7 @@ exports.createQuiz = async (req, res) => {
         }
       });
     } else {
-      // If no files uploaded, set chordDiagram to null for all quizzes
+      
       parsedQuizData.quizzes.forEach((quiz) => {
         quiz.chordDiagram = null;
       });
@@ -71,7 +71,6 @@ exports.updateQuiz = async (req, res) => {
     const { quizData } = req.body;
     const parsedQuizData = JSON.parse(quizData);
 
-    // Map files to quizzes
     if (req.files && req.files.length > 0) {
       parsedQuizData.quizzes.forEach((quiz, index) => {
         if (req.files[index]) {
@@ -81,7 +80,7 @@ exports.updateQuiz = async (req, res) => {
         }
       });
     } else {
-      // If no files uploaded, retain existing or set to null
+   
       parsedQuizData.quizzes.forEach((quiz) => {
         quiz.chordDiagram = quiz.chordDiagram || null;
       });

@@ -6,7 +6,7 @@ const parseDocxText = async (filePath) => {
         const extractedText = result.value.trim();
 
         if (!extractedText) {
-            return []; // Return an empty array if no content
+            return []; 
         }
 
         return parseDocxTextToLyrics(extractedText);
